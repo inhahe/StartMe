@@ -1,0 +1,14 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:converters="clr-namespace:StartMe.Converters">
+
+    <converters:StatusToColorConverter x:Key="StatusToColor"/>
+
+    <!-- Pulsing animation for launching indicator -->
+    <Storyboard x:Key="PulseAnimation" RepeatBehavior="Forever">
+        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                         From="1.0" To="0.3" Duration="0:0:0.6"
+                         AutoReverse="True"/>
+    </Storyboard>
+
+</ResourceDictionary>

@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+settings.json
+startme.log
+bin/
+obj/
+*.user
+.vs/
+backup/
+_find_startup*.ps1

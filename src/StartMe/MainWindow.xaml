@@ -1,0 +1,113 @@
+<Window x:Class="StartMe.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:StartMe.Models"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        Left="0" Top="0"
+        Width="360"
+        Height="{Binding Source={x:Static SystemParameters.PrimaryScreenHeight}}"
+        ResizeMode="NoResize"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown">
+
+    <Border Background="#E8101018" CornerRadius="0,12,12,0" Padding="20,24,20,20">
+        <DockPanel>
+            <!-- Header -->
+            <StackPanel DockPanel.Dock="Top" Margin="0,8,0,20">
+                <TextBlock Text="StartMe" FontSize="22" FontWeight="SemiBold"
+                           Foreground="#E0E0E0" FontFamily="Segoe UI"/>
+                <TextBlock Text="Sequential Startup Manager" FontSize="11"
+                           Foreground="#666" Margin="0,4,0,0" FontFamily="Segoe UI"/>
+            </StackPanel>
+
+            <!-- Status bar at bottom -->
+            <Border DockPanel.Dock="Bottom" Margin="0,16,0,4"
+                    Background="#18FFFFFF" CornerRadius="6" Padding="12,8">
+                <TextBlock Text="{Binding StatusText}" Foreground="#999"
+                           FontSize="12" FontFamily="Segoe UI"/>
+            </Border>
+
+            <!-- Scrollable item list -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding Entries}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:StartupEntry}">
+                            <Border x:Name="ItemBorder" Padding="10,8" Margin="0,1"
+                                    CornerRadius="4" Background="Transparent"
+                                    ToolTip="{Binding ErrorMessage}"
+                                    ToolTipService.IsEnabled="{Binding HasError}">
+                                <DockPanel>
+                                    <!-- Status dot -->
+                                    <Ellipse x:Name="StatusDot"
+                                             DockPanel.Dock="Left"
+                                             Width="8" Height="8"
+                                             Margin="0,0,12,0"
+                                             VerticalAlignment="Center"
+                                             Fill="{Binding Status, Converter={StaticResource StatusToColor}}"/>
+
+                                    <!-- Entry info -->
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}"
+                                                   Foreground="#D0D0D0"
+                                                   FontSize="13"
+                                                   FontFamily="Segoe UI"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock x:Name="SourceLabel"
+                                                   FontSize="10"
+                                                   Foreground="#555"
+                                                   FontFamily="Segoe UI"
+                                                   Margin="0,2,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="Registry"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Source}" Value="{x:Static models:StartupSource.UserStartupFolder}">
+                                                            <Setter Property="Text" Value="Startup Folder"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Source}" Value="{x:Static models:StartupSource.CommonStartupFolder}">
+                                                            <Setter Property="Text" Value="Common Startup Folder"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Source}" Value="{x:Static models:StartupSource.RegistryHKLM}">
+                                                            <Setter Property="Text" Value="Registry (Machine)"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <!-- Error message (only visible on failure) -->
+                                        <TextBlock x:Name="ErrorLabel"
+                                                   Text="{Binding ErrorMessage}"
+                                                   FontSize="10"
+                                                   Foreground="#FF6B6B"
+                                                   FontFamily="Segoe UI"
+                                                   Margin="0,2,0,0"
+                                                   TextWrapping="Wrap"
+                                                   Visibility="Collapsed"/>
+                                    </StackPanel>
+                                </DockPanel>
+                            </Border>
+
+                            <DataTemplate.Triggers>
+                                <DataTrigger Binding="{Binding Status}" Value="{x:Static models:LaunchStatus.Launching}">
+                                    <Setter TargetName="ItemBorder" Property="Background" Value="#15FFFFFF"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Status}" Value="{x:Static models:LaunchStatus.Skipped}">
+                                    <Setter TargetName="SourceLabel" Property="Text" Value="Skipped (requires admin)"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Status}" Value="{x:Static models:LaunchStatus.Failed}">
+                                    <Setter TargetName="ItemBorder" Property="Background" Value="#30FF2020"/>
+                                    <Setter TargetName="ErrorLabel" Property="Visibility" Value="Visible"/>
+                                    <Setter TargetName="SourceLabel" Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</Window>

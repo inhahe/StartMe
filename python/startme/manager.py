@@ -125,6 +125,9 @@ class StartupManager:
         if key not in self.settings.excluded_entries:
             self.settings.excluded_entries.append(key)
             self.settings.save()
+        # Mark as skipped so the launch thread won't pick it up
+        if entry.status == LaunchStatus.PENDING:
+            entry.set_status(LaunchStatus.SKIPPED, error="Removed from StartMe")
         # Re-enable so it starts normally via Windows
         if entry.source in (StartupSource.REGISTRY_HKCU, StartupSource.REGISTRY_HKLM):
             registry.enable_entry(entry)
@@ -137,6 +140,9 @@ class StartupManager:
         if key not in self.settings.removed_entries:
             self.settings.removed_entries.append(key)
             self.settings.save()
+        # Mark as skipped so the launch thread won't pick it up
+        if entry.status == LaunchStatus.PENDING:
+            entry.set_status(LaunchStatus.SKIPPED, error="Removed from startup")
         # Keep it suppressed
         if entry.source in (StartupSource.REGISTRY_HKCU, StartupSource.REGISTRY_HKLM):
             registry.suppress_entry(entry)
@@ -149,6 +155,9 @@ class StartupManager:
         if key not in self.settings.blocked_entries:
             self.settings.blocked_entries.append(key)
             self.settings.save()
+        # Mark as skipped so the launch thread won't pick it up
+        if entry.status == LaunchStatus.PENDING:
+            entry.set_status(LaunchStatus.SKIPPED, error="Blocked permanently")
         # Suppress now
         if entry.source in (StartupSource.REGISTRY_HKCU, StartupSource.REGISTRY_HKLM):
             registry.suppress_entry(entry)

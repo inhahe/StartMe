@@ -477,8 +477,6 @@ class StartMeWindow:
 
     def _item_drag_start(self, event, flat_idx: int):
         """Start dragging an item."""
-        if self._launch_started:
-            return
         self._drag_entry_idx = flat_idx
         self._drag_insert_idx = None
         # Dim the dragged item
@@ -737,8 +735,7 @@ class StartMeWindow:
         dlg.transient(self.root)
         dlg.configure(bg=BG_COLOR)
         dlg.attributes("-topmost", True)
-        dlg.geometry("420x460")
-        dlg.resizable(False, False)
+        dlg.resizable(True, True)
 
         pad = {"padx": 16, "pady": 4}
 
@@ -797,38 +794,112 @@ class StartMeWindow:
 
         tk.Frame(dlg, bg="#333", height=1).pack(fill=tk.X, padx=16, pady=(12, 8))
 
-        n_excl = len(self.settings.excluded_entries)
-        n_rem = len(self.settings.removed_entries)
-        n_blk = len(self.settings.blocked_entries)
+        # Scrollable area for entry lists (with scrollbar)
+        lists_outer = tk.Frame(dlg, bg=BG_COLOR)
+        lists_outer.pack(fill=tk.BOTH, expand=True, padx=16, pady=2)
 
-        row = tk.Frame(dlg, bg=BG_COLOR)
-        row.pack(fill=tk.X, padx=16, pady=2)
-        tk.Label(row, text=f"Excluded: {n_excl}  |  Removed: {n_rem}  |  Blocked: {n_blk}",
-                 fg=SOURCE_COLOR, bg=BG_COLOR, font=("Segoe UI", 9)).pack(side=tk.LEFT)
+        lists_scrollbar = tk.Scrollbar(lists_outer, orient=tk.VERTICAL)
+        lists_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        if n_excl + n_rem > 0:
-            btn = tk.Label(row, text="Reset excluded/removed", fg="#FF6B6B", bg=BG_COLOR,
-                           font=("Segoe UI", 9, "underline"), cursor="hand2")
-            btn.pack(side=tk.RIGHT)
-            btn.bind("<Button-1>", lambda e: self._reset_exclusions(dlg))
+        lists_canvas = tk.Canvas(lists_outer, bg=BG_COLOR, highlightthickness=0,
+                                 yscrollcommand=lists_scrollbar.set)
+        lists_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        lists_scrollbar.config(command=lists_canvas.yview)
 
-        if n_blk > 0:
-            tk.Label(dlg, text="Blocked entries:", fg=ITEM_COLOR, bg=BG_COLOR,
-                     font=("Segoe UI", 10)).pack(anchor="w", padx=16, pady=(8, 2))
+        lists_inner = tk.Frame(lists_canvas, bg=BG_COLOR)
+        lists_inner.bind("<Configure>",
+                         lambda e: lists_canvas.configure(scrollregion=lists_canvas.bbox("all")))
+        lists_canvas.create_window((0, 0), window=lists_inner, anchor="nw", tags="inner")
+        lists_canvas.bind("<Configure>",
+                          lambda e: lists_canvas.itemconfigure("inner", width=e.width))
 
-            blocked_frame = tk.Frame(dlg, bg="#1E1E28")
-            blocked_frame.pack(fill=tk.X, padx=16, pady=2)
+        def on_lists_mousewheel(event):
+            try:
+                lists_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except tk.TclError:
+                pass  # Canvas was destroyed
+        _mw_bind_id = dlg.bind_all("<MouseWheel>", on_lists_mousewheel)
+        dlg.bind("<Destroy>", lambda e: dlg.unbind_all("<MouseWheel>"), add="+")
 
-            for bkey in list(self.settings.blocked_entries):
-                bf = tk.Frame(blocked_frame, bg="#1E1E28", padx=6, pady=3)
-                bf.pack(fill=tk.X)
-                display = bkey.split("::")[-1] if "::" in bkey else bkey
-                tk.Label(bf, text=display, fg="#AA6666", bg="#1E1E28",
+        def _build_entry_list(parent, title, entries, color, undo_label, undo_cmd,
+                              clear_cmd=None):
+            if not entries:
+                return
+            header = tk.Frame(parent, bg=BG_COLOR)
+            header.pack(fill=tk.X, pady=(8, 2))
+            tk.Label(header, text=f"{title} ({len(entries)}):", fg=ITEM_COLOR, bg=BG_COLOR,
+                     font=("Segoe UI", 10)).pack(side=tk.LEFT)
+            if clear_cmd:
+                clr = tk.Label(header, text="Clear all", fg="#FF6B6B", bg=BG_COLOR,
+                               font=("Segoe UI", 8, "underline"), cursor="hand2")
+                clr.pack(side=tk.RIGHT)
+                clr.bind("<Button-1>", lambda e: clear_cmd())
+
+            frame = tk.Frame(parent, bg="#1E1E28")
+            frame.pack(fill=tk.X, pady=2)
+            for key in list(entries):
+                row = tk.Frame(frame, bg="#1E1E28", padx=6, pady=3)
+                row.pack(fill=tk.X)
+                display = key.split("::")[-1] if "::" in key else key
+                tk.Label(row, text=display, fg=color, bg="#1E1E28",
                          font=("Segoe UI", 9)).pack(side=tk.LEFT)
-                ubtn = tk.Label(bf, text="Unblock", fg="#6688BB", bg="#1E1E28",
-                                font=("Segoe UI", 8, "underline"), cursor="hand2")
-                ubtn.pack(side=tk.RIGHT)
-                ubtn.bind("<Button-1>", lambda e, k=bkey, d=dlg: self._unblock(k, d))
+                btn = tk.Label(row, text=undo_label, fg="#6688BB", bg="#1E1E28",
+                               font=("Segoe UI", 8, "underline"), cursor="hand2")
+                btn.pack(side=tk.RIGHT)
+                btn.bind("<Button-1>", lambda e, k=key: undo_cmd(k))
+
+        def _undo_exclude(key):
+            if key in self.settings.excluded_entries:
+                self.settings.excluded_entries.remove(key)
+                self.settings.save()
+            dlg.destroy()
+            self._open_settings()
+
+        def _undo_remove(key):
+            if key in self.settings.removed_entries:
+                self.settings.removed_entries.remove(key)
+                self.settings.save()
+            dlg.destroy()
+            self._open_settings()
+
+        def _undo_block(key):
+            self.manager.unblock_entry_by_key(key)
+            dlg.destroy()
+            self._open_settings()
+
+        def _clear_excluded():
+            self.settings.excluded_entries.clear()
+            self.settings.save()
+            dlg.destroy()
+            self._open_settings()
+
+        def _clear_removed():
+            self.settings.removed_entries.clear()
+            self.settings.save()
+            dlg.destroy()
+            self._open_settings()
+
+        def _clear_blocked():
+            self.settings.blocked_entries.clear()
+            self.settings.save()
+            dlg.destroy()
+            self._open_settings()
+
+        _build_entry_list(lists_inner, "Excluded (starts normally via Windows)",
+                          self.settings.excluded_entries, "#88AA66",
+                          "Re-include", _undo_exclude, _clear_excluded)
+        _build_entry_list(lists_inner, "Removed from startup",
+                          self.settings.removed_entries, "#AA6666",
+                          "Restore", _undo_remove, _clear_removed)
+        _build_entry_list(lists_inner, "Blocked (re-suppressed every boot)",
+                          self.settings.blocked_entries, "#AA6666",
+                          "Unblock", _undo_block, _clear_blocked)
+
+        if not (self.settings.excluded_entries or self.settings.removed_entries
+                or self.settings.blocked_entries):
+            tk.Label(lists_inner, text="No excluded, removed, or blocked entries.",
+                     fg=SOURCE_COLOR, bg=BG_COLOR, font=("Segoe UI", 9)).pack(
+                         anchor="w", pady=(8, 2))
 
         btn_row = tk.Frame(dlg, bg=BG_COLOR)
         btn_row.pack(fill=tk.X, padx=16, pady=(16, 12))
@@ -856,17 +927,18 @@ class StartMeWindow:
         cancel_btn.pack(side=tk.RIGHT, padx=4)
         cancel_btn.bind("<Button-1>", lambda e: dlg.destroy())
 
-    def _reset_exclusions(self, dlg):
-        self.settings.excluded_entries.clear()
-        self.settings.removed_entries.clear()
-        self.settings.save()
-        dlg.destroy()
-        self._open_settings()
+        # Auto-size: measure content and resize to fit, capped at work area height
+        dlg.update_idletasks()
+        req_width = max(520, dlg.winfo_reqwidth())
+        req_height = dlg.winfo_reqheight() + 20  # padding so nothing gets clipped
+        max_height = self._work_height - 100
+        height = min(req_height, max_height)
+        needs_scroll = req_height > max_height
+        if not needs_scroll:
+            lists_scrollbar.pack_forget()
+        dlg.geometry(f"{req_width}x{height}")
 
-    def _unblock(self, key: str, dlg):
-        self.manager.unblock_entry_by_key(key)
-        dlg.destroy()
-        self._open_settings()
+    # (undo actions for excluded/removed/blocked are handled inline in _open_settings)
 
     # -- Status updates --
 
@@ -971,8 +1043,16 @@ class StartMeWindow:
 
     def _launch_thread(self):
         import time
-        for i in range(len(self.manager.entries)):
-            self.manager.launch_next(i)
+        while True:
+            # Find the next pending entry
+            idx = None
+            for i, e in enumerate(self.manager.entries):
+                if e.status == LaunchStatus.PENDING:
+                    idx = i
+                    break
+            if idx is None:
+                break
+            self.manager.launch_next(idx)
             if self.settings.launch_delay > 0:
                 time.sleep(self.settings.launch_delay)
 

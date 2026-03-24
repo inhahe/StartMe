@@ -88,7 +88,10 @@ class StartMeWindow:
         self._work_height = rect.bottom - rect.top
         self._work_width = rect.right - rect.left
 
-        col_width = self.settings.column_width
+        # Scale column width by DPI (settings value is at 96 DPI baseline)
+        dpi = self.root.winfo_fpixels('1i')  # actual DPI
+        self._dpi_scale = dpi / 96.0
+        col_width = int(self.settings.column_width * self._dpi_scale)
         item_height, header_footer = self._measure_sizes()
         item_height += 4
         header_footer += 20
@@ -166,6 +169,7 @@ class StartMeWindow:
 
         # Settings and launch buttons always shown
         self._make_button(btn_frame, "\u2699", self._open_settings, "Settings").pack(side=tk.LEFT, padx=2)
+        self._make_button(btn_frame, "?", self._open_about, "About").pack(side=tk.LEFT, padx=2)
 
         self._launch_btn = self._make_button(btn_frame, "\u25B6", self._manual_launch, "Launch all")
         if not self.auto_launch:
@@ -726,6 +730,48 @@ class StartMeWindow:
             self._restore_btn.destroy()
             self._restore_btn = None
         self.root.deiconify()
+
+    # -- About dialog --
+
+    def _open_about(self):
+        dlg = tk.Toplevel(self.root)
+        dlg.title("About StartMe")
+        dlg.transient(self.root)
+        dlg.configure(bg=BG_COLOR)
+        dlg.attributes("-topmost", True)
+        dlg.resizable(False, False)
+
+        pad = {"padx": 24}
+
+        tk.Label(dlg, text="StartMe", font=("Segoe UI", 20, "bold"),
+                 fg=HEADER_COLOR, bg=BG_COLOR).pack(**pad, pady=(20, 2))
+
+        from . import __version__
+        tk.Label(dlg, text=f"Version {__version__}", font=("Segoe UI", 10),
+                 fg=SUBTITLE_COLOR, bg=BG_COLOR).pack(**pad, pady=(0, 12))
+
+        tk.Label(dlg, text="Sequential Startup Manager for Windows",
+                 font=("Segoe UI", 10), fg=ITEM_COLOR, bg=BG_COLOR).pack(**pad, pady=2)
+
+        tk.Frame(dlg, bg="#333", height=1).pack(fill=tk.X, padx=24, pady=(12, 12))
+
+        tk.Label(dlg, text="Created by", font=("Segoe UI", 9),
+                 fg=SUBTITLE_COLOR, bg=BG_COLOR).pack(**pad, pady=(0, 2))
+        tk.Label(dlg, text="Richard Albert Nichols III (Inhahe)", font=("Segoe UI", 10),
+                 fg=ITEM_COLOR, bg=BG_COLOR).pack(**pad)
+        tk.Label(dlg, text="& Claude Code using Opus 4.6", font=("Segoe UI", 10),
+                 fg=ITEM_COLOR, bg=BG_COLOR).pack(**pad, pady=(0, 12))
+
+        link = tk.Label(dlg, text="github.com/inhahe/StartMe", font=("Segoe UI", 10, "underline"),
+                        fg="#4488CC", bg=BG_COLOR, cursor="hand2")
+        link.pack(**pad, pady=(0, 4))
+        link.bind("<Button-1>", lambda e: __import__("webbrowser").open("https://github.com/inhahe/StartMe"))
+
+        tk.Label(dlg, text="MIT License", font=("Segoe UI", 9),
+                 fg=SUBTITLE_COLOR, bg=BG_COLOR).pack(**pad, pady=(0, 20))
+
+        dlg.update_idletasks()
+        dlg.geometry(f"{max(340, dlg.winfo_reqwidth())}x{dlg.winfo_reqheight()}")
 
     # -- Settings dialog --
 

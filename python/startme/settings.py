@@ -41,7 +41,7 @@ class Settings:
 
     # Overlay mode: True = borderless, topmost, no taskbar (original behavior)
     # False = normal window with title bar, taskbar entry, not topmost
-    overlay_mode: bool = True
+    overlay_mode: bool = False
 
     def save(self):
         data = {

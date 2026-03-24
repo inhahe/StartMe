@@ -67,6 +67,11 @@ class StartMeWindow:
         self.root.title("StartMe")
         self.root.configure(bg=BG_COLOR)
 
+        # Resize state
+        self._resizing = False
+        self._resize_start_x = 0
+        self._resize_start_w = 0
+
         if self.settings.overlay_mode:
             self.root.overrideredirect(True)
             self.root.attributes("-topmost", True)
@@ -77,6 +82,10 @@ class StartMeWindow:
 
         self._update_geometry()
         self._build_ui()
+
+        # Add resize grip on right edge (overlay mode only, normal mode has native resize)
+        if self.settings.overlay_mode:
+            self._add_resize_grip()
 
         for entry in self.manager.entries:
             entry._on_status_changed = self._on_entry_status_changed
@@ -329,15 +338,13 @@ class StartMeWindow:
         n = len(entries)
         cols = self._num_columns
         per_col = math.ceil(n / cols) if cols > 0 else n
-        col_width = self.settings.column_width
 
         for col_idx in range(cols):
             self._columns_outer.columnconfigure(col_idx, weight=1, uniform="col")
 
-            col_outer = tk.Frame(self._columns_outer, bg=BG_COLOR, width=col_width)
+            col_outer = tk.Frame(self._columns_outer, bg=BG_COLOR)
             col_outer.grid(row=0, column=col_idx, sticky="nsew",
                            padx=(0, 8 if col_idx < cols - 1 else 0))
-            col_outer.grid_propagate(False)
 
             canvas = tk.Canvas(col_outer, bg=BG_COLOR, highlightthickness=0)
             col_frame = tk.Frame(canvas, bg=BG_COLOR)
@@ -652,6 +659,30 @@ class StartMeWindow:
         y = event.y_root - self._win_drag_y
         self.root.geometry(f"+{x}+{y}")
 
+    # -- Window resizing (right edge) --
+
+    def _add_resize_grip(self):
+        """Add an invisible resize grip on the right edge of the window."""
+        grip = tk.Frame(self.root, bg=BG_COLOR, width=6, cursor="sb_h_double_arrow")
+        grip.place(relx=1.0, rely=0, relheight=1.0, anchor="ne")
+        grip.bind("<Button-1>", self._resize_start)
+        grip.bind("<B1-Motion>", self._resize_motion)
+
+    def _resize_start(self, event):
+        self._resizing = True
+        self._resize_start_x = event.x_root
+        self._resize_start_w = self.root.winfo_width()
+
+    def _resize_motion(self, event):
+        if not self._resizing:
+            return
+        delta = event.x_root - self._resize_start_x
+        new_width = max(200, self._resize_start_w + delta)
+        height = self.root.winfo_height()
+        x = self.root.winfo_x()
+        y = self.root.winfo_y()
+        self.root.geometry(f"{new_width}x{height}+{x}+{y}")
+
     # -- Context menu actions --
 
     def _ctx_skip_session(self, entry: StartupEntry):
@@ -840,32 +871,9 @@ class StartMeWindow:
 
         tk.Frame(dlg, bg="#333", height=1).pack(fill=tk.X, padx=16, pady=(12, 8))
 
-        # Scrollable area for entry lists (with scrollbar)
-        lists_outer = tk.Frame(dlg, bg=BG_COLOR)
-        lists_outer.pack(fill=tk.BOTH, expand=True, padx=16, pady=2)
-
-        lists_scrollbar = tk.Scrollbar(lists_outer, orient=tk.VERTICAL)
-        lists_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        lists_canvas = tk.Canvas(lists_outer, bg=BG_COLOR, highlightthickness=0,
-                                 yscrollcommand=lists_scrollbar.set)
-        lists_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        lists_scrollbar.config(command=lists_canvas.yview)
-
-        lists_inner = tk.Frame(lists_canvas, bg=BG_COLOR)
-        lists_inner.bind("<Configure>",
-                         lambda e: lists_canvas.configure(scrollregion=lists_canvas.bbox("all")))
-        lists_canvas.create_window((0, 0), window=lists_inner, anchor="nw", tags="inner")
-        lists_canvas.bind("<Configure>",
-                          lambda e: lists_canvas.itemconfigure("inner", width=e.width))
-
-        def on_lists_mousewheel(event):
-            try:
-                lists_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            except tk.TclError:
-                pass  # Canvas was destroyed
-        _mw_bind_id = dlg.bind_all("<MouseWheel>", on_lists_mousewheel)
-        dlg.bind("<Destroy>", lambda e: dlg.unbind_all("<MouseWheel>"), add="+")
+        # Entry lists area
+        lists_inner = tk.Frame(dlg, bg=BG_COLOR, padx=16)
+        lists_inner.pack(fill=tk.X)
 
         def _build_entry_list(parent, title, entries, color, undo_label, undo_cmd,
                               clear_cmd=None):
@@ -976,12 +984,9 @@ class StartMeWindow:
         # Auto-size: measure content and resize to fit, capped at work area height
         dlg.update_idletasks()
         req_width = max(520, dlg.winfo_reqwidth())
-        req_height = dlg.winfo_reqheight() + 20  # padding so nothing gets clipped
+        req_height = dlg.winfo_reqheight() + 20
         max_height = self._work_height - 100
         height = min(req_height, max_height)
-        needs_scroll = req_height > max_height
-        if not needs_scroll:
-            lists_scrollbar.pack_forget()
         dlg.geometry(f"{req_width}x{height}")
 
     # (undo actions for excluded/removed/blocked are handled inline in _open_settings)
